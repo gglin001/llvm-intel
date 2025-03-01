@@ -1,0 +1,69 @@
+{
+  "version": 8,
+  "configurePresets": [
+    {
+      "name": "linux",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/../build/install",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "CMAKE_C_COMPILER": "/usr/bin/clang",
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++",
+        "CMAKE_INSTALL_RPATH_USE_LINK_PATH": true,
+        "LLVM_ENABLE_LLD": true,
+        "LLVM_ENABLE_ASSERTIONS": true,
+        "LLVM_ENABLE_WARNINGS": true,
+        "LLVM_ENABLE_BINDINGS": false,
+        "LLVM_ENABLE_ZSTD": false,
+        "LLVM_ENABLE_ZLIB": false,
+        "LLVM_INCLUDE_DOCS": false,
+        "LLVM_INCLUDE_EXAMPLES": false,
+        "LLVM_INCLUDE_TESTS": false,
+        "LLVM_INCLUDE_TOOLS": true,
+        "LLVM_INCLUDE_UTILS": true,
+        "LLVM_INSTALL_UTILS": true,
+        "LLVM_INCLUDE_RUNTIMES": false,
+        "LLVM_INCLUDE_BENCHMARKS": false,
+        "LLVM_APPEND_VC_REV": false,
+        "LLVM_ENABLE_IDE": true,
+        "LLVM_TARGETS_TO_BUILD": "Native;RISCV;SPIRV",
+        "LLVM_EXTERNAL_PROJECTS": "llvm-spirv",
+        "LLVM_EXTERNAL_LLVM_SPIRV_SOURCE_DIR": "${sourceDir}/../llvm-spirv",
+        "LLVM_ENABLE_PROJECTS": "clang;lld;llvm-spirv"
+      }
+    },
+    {
+      "name": "sycl",
+      "inherits": "linux",
+      "binaryDir": "${sourceDir}/../build-sycl",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/../build-sycl/install",
+        "CMAKE_C_COMPILER": "${sourceDir}/../build/bin/clang",
+        "CMAKE_CXX_COMPILER": "${sourceDir}/../build/bin/clang++",
+        "CMAKE_LINKER_TYPE": "LLD",
+        "LLVM_NATIVE_TOOL_DIR": "${sourceDir}/../build/bin",
+        "LLVM_EXTERNAL_PROJECTS": "sycl;llvm-spirv;opencl;xpti;xptifw;libdevice;sycl-jit;lld",
+        "LLVM_EXTERNAL_SYCL_SOURCE_DIR": "${sourceDir}/../sycl",
+        "LLVM_EXTERNAL_LLVM_SPIRV_SOURCE_DIR": "${sourceDir}/../llvm-spirv",
+        "LLVM_EXTERNAL_XPTI_SOURCE_DIR": "${sourceDir}/../xpti",
+        "XPTI_SOURCE_DIR": "${sourceDir}/../xpti",
+        "LLVM_EXTERNAL_XPTIFW_SOURCE_DIR": "${sourceDir}/../xptifw",
+        "LLVM_EXTERNAL_LIBDEVICE_SOURCE_DIR": "${sourceDir}/../libdevice",
+        "LLVM_EXTERNAL_SYCL_JIT_SOURCE_DIR": "${sourceDir}/../sycl-jit",
+        "LLVM_ENABLE_PROJECTS": "sycl;libdevice;opencl",
+        "LLVM_INCLUDE_UTILS": false,
+        "SYCL_ENABLE_COMPILER": false,
+        "SYCL_ENABLE_BACKENDS": "opencl",
+        "SYCL_ENABLE_WERROR": false,
+        "SYCL_INCLUDE_TESTS": false,
+        "SYCL_ENABLE_XPTI_TRACING": false,
+        "SYCL_ENABLE_EXTENSION_JIT": false,
+        "SYCL_ENABLE_MAJOR_RELEASE_PREVIEW_LIB": true,
+        "XPTI_ENABLE_WERROR": false,
+        "NATIVECPU_USE_OCK": false
+      }
+    }
+  ]
+}
