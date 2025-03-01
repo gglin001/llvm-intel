@@ -1,0 +1,177 @@
+diff --git a/clang/lib/AST/ItaniumMangle.cpp b/clang/lib/AST/ItaniumMangle.cpp
+index d7543c69f0ee..f599379dc013 100644
+--- a/clang/lib/AST/ItaniumMangle.cpp
++++ b/clang/lib/AST/ItaniumMangle.cpp
+@@ -4243,8 +4243,10 @@ void CXXNameMangler::mangleType(const VectorType *T) {
+     llvm::Triple Target = getASTContext().getTargetInfo().getTriple();
+     llvm::Triple::ArchType Arch =
+         getASTContext().getTargetInfo().getTriple().getArch();
+-    if ((Arch == llvm::Triple::aarch64 ||
+-         Arch == llvm::Triple::aarch64_be) && !Target.isOSDarwin())
++    // workaround for `arm_neon.h`
++    if ((Arch == llvm::Triple::aarch64 || Arch == llvm::Triple::aarch64_be ||
++         Arch == llvm::Triple::spir64 || Arch == llvm::Triple::spirv64) &&
++        !Target.isOSDarwin())
+       mangleAArch64NeonVectorType(T);
+     else
+       mangleNeonVectorType(T);
+diff --git a/clang/lib/Sema/SemaType.cpp b/clang/lib/Sema/SemaType.cpp
+index 469f39050ad0..70354cea84e9 100644
+--- a/clang/lib/Sema/SemaType.cpp
++++ b/clang/lib/Sema/SemaType.cpp
+@@ -2549,9 +2549,10 @@ bool Sema::CheckFunctionReturnType(QualType T, SourceLocation Loc) {
+ 
+   // Functions cannot return half FP.
+   if (T->isHalfType() && !getLangOpts().NativeHalfArgsAndReturns &&
+-      !Context.getTargetInfo().allowHalfArgsAndReturns()) {
+-    Diag(Loc, diag::err_parameters_retval_cannot_have_fp16_type) << 1 <<
+-      FixItHint::CreateInsertion(Loc, "*");
++      !Context.getTargetInfo().allowHalfArgsAndReturns() &&
++      !getLangOpts().SYCLIsDevice) {
++    Diag(Loc, diag::err_parameters_retval_cannot_have_fp16_type)
++        << 1 << FixItHint::CreateInsertion(Loc, "*");
+     return true;
+   }
+ 
+@@ -4970,6 +4971,8 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
+                 << T << 0 /*pointer hint*/;
+             D.setInvalidType(true);
+           }
++        } else if (S.getLangOpts().SYCLIsDevice) {
++          // workaround for `arm_neon.h`
+         } else if (!S.getLangOpts().NativeHalfArgsAndReturns &&
+                    !S.Context.getTargetInfo().allowHalfArgsAndReturns()) {
+           S.Diag(D.getIdentifierLoc(),
+@@ -5230,6 +5233,8 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
+                 D.setInvalidType();
+                 Param->setInvalidDecl();
+               }
++            } else if (S.getLangOpts().SYCLIsDevice) {
++              // workaround for `arm_neon.h`
+             } else if (!S.getLangOpts().NativeHalfArgsAndReturns &&
+                        !S.Context.getTargetInfo().allowHalfArgsAndReturns()) {
+               S.Diag(Param->getLocation(),
+@@ -8421,10 +8426,11 @@ static bool verifyValidIntegerConstantExpr(Sema &S, const ParsedAttr &Attr,
+ /// match one of the standard Neon vector types.
+ static void HandleNeonVectorTypeAttr(QualType &CurType, const ParsedAttr &Attr,
+                                      Sema &S, VectorKind VecKind) {
+-  bool IsTargetCUDAAndHostARM = false;
+-  if (S.getLangOpts().CUDAIsDevice) {
++  bool IsTargetDeviceAndHostARM = false;
++  // workaround for `arm_neon.h`
++  if (S.getLangOpts().CUDAIsDevice || S.getLangOpts().SYCLIsDevice) {
+     const TargetInfo *AuxTI = S.getASTContext().getAuxTargetInfo();
+-    IsTargetCUDAAndHostARM =
++    IsTargetDeviceAndHostARM =
+         AuxTI && (AuxTI->getTriple().isAArch64() || AuxTI->getTriple().isARM());
+   }
+ 
+@@ -8461,7 +8467,7 @@ static void HandleNeonVectorTypeAttr(QualType &CurType, const ParsedAttr &Attr,
+ 
+   // Only certain element types are supported for Neon vectors.
+   if (!isPermittedNeonBaseType(CurType, VecKind, S) &&
+-      !IsTargetCUDAAndHostARM) {
++      !IsTargetDeviceAndHostARM) {
+     S.Diag(Attr.getLoc(), diag::err_attribute_invalid_vector_type) << CurType;
+     Attr.setInvalid();
+     return;
+diff --git a/libdevice/CMakeLists.txt b/libdevice/CMakeLists.txt
+index 2b8660ebaa99..9d6c2623bc13 100644
+--- a/libdevice/CMakeLists.txt
++++ b/libdevice/CMakeLists.txt
+@@ -52,4 +52,4 @@ set(LIBDEVICE_LIBRARY_DIR ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
+ set(LIBDEVICE_RUNTIME_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+ set(LIBDEVICE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+ 
+-add_subdirectory(test)
++# add_subdirectory(test)
+diff --git a/sycl-jit/CMakeLists.txt b/sycl-jit/CMakeLists.txt
+index b790455ceeed..02c66abc9e4f 100644
+--- a/sycl-jit/CMakeLists.txt
++++ b/sycl-jit/CMakeLists.txt
+@@ -24,8 +24,8 @@ add_subdirectory(common)
+ add_subdirectory(jit-compiler)
+ add_subdirectory(passes)
+ 
+-# Loadable plugins for opt aren't supported on Windows,
+-# so we can't execute the tests.
+-if (NOT WIN32 AND NOT CYGWIN)
+-  add_subdirectory(test)
+-endif()
++# # Loadable plugins for opt aren't supported on Windows,
++# # so we can't execute the tests.
++# if (NOT WIN32 AND NOT CYGWIN)
++#   add_subdirectory(test)
++# endif()
+diff --git a/sycl/CMakeLists.txt b/sycl/CMakeLists.txt
+index 1e5c6052ec50..ea398b8977d7 100644
+--- a/sycl/CMakeLists.txt
++++ b/sycl/CMakeLists.txt
+@@ -11,6 +11,7 @@ option(SYCL_ADD_DEV_VERSION_POSTFIX "Adds -V postfix to version string" ON)
+ option(SYCL_ENABLE_COVERAGE "Enables code coverage for runtime and unit tests" OFF)
+ option(SYCL_ENABLE_STACK_PRINTING "Enables stack printing on crashes of SYCL applications" OFF)
+ option(SYCL_LIB_WITH_DEBUG_SYMBOLS "Builds SYCL runtime libraries with debug symbols" OFF)
++option(SYCL_ENABLE_COMPILER "Builds SYCL compiler" ON)
+ 
+ if (NOT SYCL_COVERAGE_PATH)
+   set(SYCL_COVERAGE_PATH "${CMAKE_CURRENT_BINARY_DIR}/profiles")
+@@ -369,6 +370,7 @@ if (SYCL_ENABLE_XPTI_TRACING)
+ endif()
+ 
+ # SYCL toolchain builds all components: compiler, libraries, headers, etc.
++if(SYCL_ENABLE_COMPILER)
+ add_custom_target(sycl-compiler
+   DEPENDS append-file
+           clang
+@@ -385,10 +387,14 @@ add_custom_target(sycl-compiler
+           llvm-spirv
+           llvm-link
+           llvm-objcopy
++          llvm-dis
+           spirv-to-ir-wrapper
+           sycl-post-link
+           opencl-aot
+ )
++else()
++add_custom_target(sycl-compiler)
++endif(SYCL_ENABLE_COMPILER)
+ 
+ add_custom_target( sycl-runtime-libraries
+   DEPENDS ${SYCL_RT_LIBS}
+@@ -451,6 +457,7 @@ endif()
+ get_property(SYCL_TOOLCHAIN_DEPS GLOBAL PROPERTY SYCL_TOOLCHAIN_INSTALL_COMPONENTS)
+ # Package deploy support
+ # Listed here are component names contributing the package
++if(SYCL_ENABLE_COMPILER)
+ set( SYCL_TOOLCHAIN_DEPLOY_COMPONENTS
+      append-file
+      boost_mp11-headers
+@@ -468,6 +475,7 @@ set( SYCL_TOOLCHAIN_DEPLOY_COMPONENTS
+      llvm-spirv
+      llvm-link
+      llvm-objcopy
++     llvm-dis
+      spirv-to-ir-wrapper
+      sycl-post-link
+      sycl-ls
+@@ -483,6 +491,20 @@ set( SYCL_TOOLCHAIN_DEPLOY_COMPONENTS
+      ${XPTIFW_LIBS}
+      ${SYCL_TOOLCHAIN_DEPS}
+ )
++else()
++set( SYCL_TOOLCHAIN_DEPLOY_COMPONENTS
++     OpenCL-Headers
++     opencl-aot
++     sycl-headers
++     sycl-headers-extras
++     sycl
++     libsycldevice
++     unified-memory-framework
++     unified-runtime-loader
++     ${XPTIFW_LIBS}
++     ${SYCL_TOOLCHAIN_DEPS}
++)
++endif(SYCL_ENABLE_COMPILER)
+ 
+ if("cuda" IN_LIST SYCL_ENABLE_BACKENDS)
+   list(APPEND SYCL_TOOLCHAIN_DEPLOY_COMPONENTS clang-nvlink-wrapper)
