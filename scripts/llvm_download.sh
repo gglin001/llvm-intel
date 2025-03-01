@@ -4,8 +4,8 @@ mkdir -p llvm-dpcpp && pushd llvm-dpcpp
 
 git init
 
-git remote add origin git@github.com:intel/llvm.git
-# git remote add origin /repo/llvm-dpcpp
+# git remote add origin git@github.com:intel/llvm.git
+git remote add origin /repos_osx/_compiler/llvm-dpcpp
 
 ######
 
@@ -35,6 +35,8 @@ LLVM_SHA="8e69702ec6028ad19be68b1a3909213a9ac4b73c"
 git fetch --depth 1 origin $LLVM_SHA
 # git checkout -b sync $LLVM_SHA
 git checkout $LLVM_SHA
+
+git apply "$PWD/../patchs/$LLVM_SHA.patch"
 
 popd
 
