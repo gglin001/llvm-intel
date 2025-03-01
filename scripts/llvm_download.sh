@@ -4,8 +4,8 @@ mkdir -p llvm-dpcpp && pushd llvm-dpcpp
 
 git init
 
-# git remote add origin git@github.com:intel/llvm.git
-git remote add origin /repos_osx/_compiler/llvm-dpcpp
+git remote add origin git@github.com:intel/llvm.git
+# git remote add origin /repo/llvm-dpcpp
 
 ######
 
